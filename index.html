@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>محلل الشطرنج الذكي</title>
+    <link rel="stylesheet" href="css/chessboard-1.0.0.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #2c3e50; color: white; padding: 20px; }
+        #myBoard { width: 400px; margin: 20px auto; border: 5px solid #34495e; }
+        textarea { width: 400px; height: 60px; margin-bottom: 10px; border-radius: 5px; padding: 10px; }
+        button { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; width: 400px; }
+        #evaluation { font-weight: bold; color: #f1c40f; font-size: 1.2em; }
+    </style>
+</head>
+<body>
+    <h1>محلل الشطرنج الذكي</h1>
+    <textarea id="pgnInput" placeholder="الصق نص الـ PGN هنا..."></textarea>
+    <button onclick="loadPGN()">تحليل المباراة</button>
+    <div id="myBoard"></div>
+    <div class="controls">
+        <p>التقييم: <span id="evaluation">0.00 | بانتظار الحركة</span></p>
+    </div>
+
+    <!-- استدعاء المكتبات المحلية فقط -->
+    <script src="jquery.js"></script>
+    <script src="chess.js"></script>
+    <script src="chessboard-1.0.0.min.js"></script>
+    
+
+    <script>
+        var board = null;
+        var game = new Chess();
+        var lastScore = 0.0;
+
+        // تشغيل المحرك المحلي
+       // هذه النسخة (v10.0.2) مستقرة جداً وتعمل بدون الحاجة لإعدادات أمان خاصة
+        var engine = new Worker("https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js")
+        var lastScore = 0.0;
+        engine.postMessage('uci');
+
+        function onDrop (source, target) {
+            var move = game.move({ from: source, to: target, promotion: 'q' });
+            if (move === null) return 'snapback';
+            analyzePosition();
+        }
+
+        function analyzePosition() {
+            engine.postMessage('position fen ' + game.fen());
+            engine.postMessage('go depth 15');
+        }
+
+        engine.onmessage = function(event) {
+            if (event.data.includes('score cp')) {
+                var score = parseInt(event.data.split('score cp ')[1].split(' ')[0]) / 100;
+                if (game.turn() === 'b') score = -score;
+                
+                // حساب جودة النقلة (Blunder, Best Move...)
+                var diff = Math.abs(score - lastScore);
+                var quality = "Best ⭐";
+                if (diff > 0.3) quality = "Excellent ✨";
+                if (diff > 0.9) quality = "Inaccuracy 🤨";
+                if (diff > 2.0) quality = "Mistake ⚠️";
+                if (diff > 4.0) quality = "Blunder ❌";
+
+                document.getElementById('evaluation').innerHTML = score.toFixed(2) + " | <b>" + quality + "</b>";
+                lastScore = score;
+            }
+        };
+
+        function loadPGN() {
+            var pgn = document.getElementById('pgnInput').value;
+            if (game.load_pgn(pgn)) {
+                board.position(game.fen());
+                analyzePosition();
+            } else { alert("خطأ في الـ PGN"); }
+        }
+
+        board = ChessBoard('myBoard', {
+            draggable: true,
+            position: 'start',
+            pieceTheme: 'img/chesspieces/wikipedia/{piece}.png',
+            onDrop: onDrop,
+            onSnapEnd: function() { board.position(game.fen()) }
+        });
+    </script>
+</body>
+</html>
